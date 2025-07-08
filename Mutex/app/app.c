@@ -1,0 +1,260 @@
+/****************************************************************************************
+* uCos-II Multitasking Application Code
+*****************************************************************************************
+*
+* Program Name : Mutex
+* Description  : This program creates total four uCos-II tasks; out of which
+*                main task acts as a parent task and creates three child tasks which 
+*				 access the LCD to display respective data. The Mutex controls the exclusive
+*				 access to LCD for each task.
+*
+* MicroEmbedded Technologies
+* Processor : NXP LPC2148
+* Board		: Micro-A748
+*
+****************************************************************************************/
+
+#include <includes.h>
+#include "func.h"
+
+/********** Define Task Priorities ***********/
+#define  APP_TASK_START_PRIO                   4
+#define  APP_TASK0_PRIO                        5
+#define  APP_TASK1_PRIO                        6
+#define  APP_TASK2_PRIO                        7
+
+
+
+/*--------------- AAPLICATION STACKS ---------*/
+static  OS_STK       AppTaskStartStk[APP_TASK_STK_SIZE];
+static  OS_STK       AppTask0stk[APP_TASK_STK_SIZE];		/* Create the required number of stacks need for every child task*/
+static  OS_STK       AppTask1stk[APP_TASK_STK_SIZE];
+static  OS_STK       AppTask2stk[APP_TASK_STK_SIZE];
+
+
+
+/*-------------LOCAL FUNCTION PROTOTYPES--------------*/
+
+/*--------------- A PARENT TASK (MAIN TASK) ---------*/
+static  void  AppTaskStart (void        *p_arg); 			 /* Main(Parent) Task Function */
+static  void  AppTaskCreate(void);				  			 /* Separate Function To Create Child Task(s) */
+
+/*--------------- CHILDERN TRASKS --------------*/
+static  void  AppTask0   	 (void        *p_arg);			 
+static  void  AppTask1     	 (void        *p_arg);			 
+static  void  AppTask2  	 (void        *p_arg);
+
+
+OS_EVENT *LCD_Mutex;
+
+		 
+/**********************************************************************************************************
+*                                                main()
+*
+* Description : This is the standard entry point for C code.  It is assumed that your code will call
+*               main() once you have performed all necessary initialization.
+*
+* Argument(s) : none
+*
+* Return(s)   : none
+**********************************************************************************************************/
+
+int  main (void)
+{
+    BSP_IntDisAll();                          /* Disable all interrupts until we are ready to accept them */
+    OSInit();                                 /* Initialize "uC/OS-II, The Real-Time Kernel"              */
+	
+    OSTaskCreate(AppTaskStart,                               /* Create the starting task i.e. Main Task        */
+                    (void *)0,
+                    (OS_STK *)&AppTaskStartStk[APP_TASK_STK_SIZE - 1],
+                    APP_TASK_START_PRIO);
+
+    OSStart();                                                  /* Start multitasking (i.e. give control to uC/OS-II)       */
+}
+
+
+/***************************************************************************************
+*                                          AppTaskStart()
+*
+* Description : The startup task. The uC/OS-II ticker should only be initialize once multitasking starts.
+*
+* Argument(s) : p_arg       Argument passed to 'AppTaskStart()' by 'OSTaskCreate()'.
+*
+* Return(s)   : none.
+*
+* Note(s)     : (1) The first line of code is used to prevent a compiler warning because 'p_arg' is not
+*                   used.  The compiler should not generate any code for this 
+*					statement.
+*
+*               (2) Interrupts are enabled by uCoss-II once the task starts because 
+*					main() has disbled it.
+****************************************************************************************/
+
+static  void  AppTaskStart (void *p_arg)
+{
+	unsigned char err;
+    p_arg = p_arg;							/*Just to avoid compiler Warning 			*/
+
+    BSP_Init();                             /* Initialize BSP functions 	*/ 
+	InitLCD();								/* Initialize LCD	*/
+	kbdInit();								/* Initialize Keyboard	*/
+	ADCInit();								/* Initialize ADC	*/
+	LEDInit();	  							/* Initialize LED	*/
+	UartInit(9600);							/* Initialise the UART*/	
+
+	LCD_Mutex = OSMutexCreate(3,&err);		/* Create a Mutex	*/
+
+	AppTaskCreate();                        /* Create application tasks  (child tasks)        */
+
+    while(DEF_TRUE)
+	{
+	 printf(" \r\nMAIN TASK: Created 3 Tasks. Now going to deep sleep...");
+	 printf(" \r\n======================================================\r\n");
+	 OSTimeDlyHMSM(1, 0, 0, 0);
+	}
+}
+
+
+/*
+*********************************************************************************************************
+*                                      AppTaskCreate()
+*
+* Description :  Create the application tasks.
+*
+* Argument(s) :  none.
+*
+* Return(s)   :  none.
+*********************************************************************************************************
+*/
+
+static  void  AppTaskCreate (void)
+{
+	/* Create User Tasks */
+	/* Create Task0 */
+    OSTaskCreate(AppTask0,
+                    (void *)0,
+                    (OS_STK *)&AppTask0stk[APP_TASK_STK_SIZE - 1],
+                    APP_TASK0_PRIO);
+
+
+   /* Create Task1 */
+    OSTaskCreate(AppTask1,
+                    (void *)0,
+                    (OS_STK *)&AppTask1stk[APP_TASK_STK_SIZE - 1],
+                    APP_TASK1_PRIO);
+
+
+	/* Create Task2 */
+    OSTaskCreate(AppTask2,
+                  (void *)0,
+                  (OS_STK *)&AppTask2stk[APP_TASK_STK_SIZE - 1],
+                  APP_TASK2_PRIO);
+
+}
+
+/*******************************************************************************************
+*                                    TASK-0 : AppTask0()
+*
+* Description : 
+*
+* Argument(s) : p_arg       Argument passed to 'AppTask0()' by 'OSTaskCreate()'.
+*
+* Return(s)   : none.
+*
+* Note(s)     : (1) The first line of code is used to prevent a compiler warning 
+*					because 'p_arg' is not used.  The compiler should not generate 
+*					any code for this statement.
+****************************************************************************************/
+static  void  AppTask0 (void *p_arg)
+{
+	unsigned char err;
+   	p_arg = p_arg;									   /*Just to avoid compiler Warning 			*/
+
+    while(DEF_TRUE)
+    {     
+	 /* User Code Here */
+		 printf("TASK0: Waiting for LCD\n\r"); 
+		 OSMutexPend(LCD_Mutex,0,&err);				  /*	Wait to acquire Mutex	*/
+		 printf("TASK0: LCD acquired\n\r");
+		 LCD_display(1,1,"This is TASK0");			  /*	Perform operations on LCD	*/
+		 OSTimeDlyHMSM(0,0,15,0);
+		 OSMutexPost(LCD_Mutex);					  /*	Release Mutex	*/
+		 printf("TASK0: Released LCD\n\r\n\r");
+		 OSTimeDlyHMSM(0,0,10,0);	
+
+    }
+}
+
+
+/*******************************************************************************************
+*                                    TASK-1 : AppTask1()
+*
+* Description : 
+*
+* Argument(s) : p_arg       Argument passed to 'AppTask1()' by 'OSTaskCreate()'.
+*
+* Return(s)   : none.
+*
+* Note(s)     : (1) The first line of code is used to prevent a compiler warning 
+*					because 'p_arg' is not used.  The compiler should not generate 
+*					any code for this statement.
+****************************************************************************************/
+
+static  void  AppTask1 (void *p_arg)
+{
+	unsigned char err;
+   	p_arg = p_arg;											 /* Just to avoid compiler Warning 			*/
+
+   	while(DEF_TRUE)
+   	{
+	 /* User Code Here */
+	 	printf("TASK1: Waiting for LCD\n\r"); 
+	 	OSMutexPend(LCD_Mutex,0,&err);					   	/*	Wait to acquire Mutex	*/
+	 	printf("TASK1: LCD acquired\n\r");
+	 	LCD_display(1,1,"This is TASK1");					/*	Perform operations on LCD	*/
+		OSTimeDlyHMSM(0,0,5,0);								
+	 	OSMutexPost(LCD_Mutex);								/*	Release Mutex	*/
+	 	printf("TASK1: Released LCD\n\r\n\r");
+	 	OSTimeDlyHMSM(0,0,6,0);	
+
+   	}
+}
+
+
+
+/*******************************************************************************************
+*                                    TASK-2 : AppTask2()
+*
+* Description : 
+*
+* Argument(s) : p_arg       Argument passed to 'AppTask2()' by 'OSTaskCreate()'.
+*
+* Return(s)   : none.
+*
+* Note(s)     : (1) The first line of code is used to prevent a compiler warning 
+*					because 'p_arg' is not used.  The compiler should not generate 
+*					any code for this statement.
+****************************************************************************************/
+
+static  void  AppTask2 (void *p_arg)
+{
+	unsigned char err;
+   	p_arg = p_arg;										/* Just to avoid compiler Warning 		*/
+
+   	while(DEF_TRUE)
+    {
+	 /* User Code Here */
+	 	printf("TASK2: Waiting for LCD\n\r"); 
+	 	OSMutexPend(LCD_Mutex,0,&err);					/*	Wait to acquire Mutex	*/
+	 	printf("TASK2: LCD acquired\n\r");
+	 	LCD_display(1,1,"This is TASK2");			   	/*	Perform operations on LCD	*/
+		OSTimeDlyHMSM(0,0,8,0);
+	 	OSMutexPost(LCD_Mutex);						   /*	Release Mutex	*/
+	 	printf("TASK2: Released LCD\n\r\n\r");
+	 	OSTimeDlyHMSM(0,0,4,0);	
+
+   	}
+}
+
+
+

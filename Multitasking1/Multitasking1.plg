@@ -1,0 +1,15 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Project:</h2>
+F:\Micro_A748_SI\Programs\uCOS-II\Multitasking1\Multitasking1.uvproj
+Project File Date:  09/07/2023
+
+<h2>Output:</h2>
+Build target 'Target 1'
+linking...
+Multitasking1.axf: Warning: L6305W: Image does not have an entry point. (Not specified or not set due to multiple choices.)
+Program Size: Code=25416 RO-data=400 RW-data=200 ZI-data=12912  
+FromELF: creating hex file...
+"Multitasking1.axf" - 0 Error(s), 1 Warning(s).
